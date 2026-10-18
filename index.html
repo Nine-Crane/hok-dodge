@@ -243,7 +243,7 @@
   <div class="panel">
     <div class="brand">王者荣耀走位模拟器</div>
     <div class="subtitle">轮盘走位 · 躲避技能 · 活得越久分越高</div>
-    <div class="disclaimer">非官方同人练习 · 技能与音效为原创合成</div>
+    <div class="disclaimer">非官方同人练习 · 技能与音效为原创合成 · v2</div>
     <div class="diffs" id="diffs">
       <button class="diff active" data-diff="normal" type="button"><b>普通</b><span>5 条命 · 节奏舒缓</span></button>
       <button class="diff" data-diff="hard" type="button"><b>困难</b><span>3 条命 · 技能更密</span></button>
@@ -319,9 +319,9 @@
   var bgCanvas = null, glowSprite = null;
 
   var DIFFS = {
-    normal:  { name: '普通', lives: 5, spawn: [1.00, 1.45], bullet: 228, aoe: 1.35, beam: 1.05, homing: 122, fan: 3, nova: 12, novaGap: 0.95 },
-    hard:    { name: '困难', lives: 3, spawn: [0.70, 1.00], bullet: 300, aoe: 1.00, beam: 0.86, homing: 150, fan: 5, nova: 16, novaGap: 0.72 },
-    extreme: { name: '极限', lives: 1, spawn: [0.48, 0.74], bullet: 365, aoe: 0.80, beam: 0.68, homing: 175, fan: 7, nova: 20, novaGap: 0.52 }
+    normal:  { name: '普通', lives: 5, spawn: [1.00, 1.45], bullet: 228, aoe: 1.35, beam: 1.05, homing: 122, fan: 3, nova: 12, novaGap: 0.95, warn: 0.55, novaWarn: 0.70 },
+    hard:    { name: '困难', lives: 3, spawn: [0.70, 1.00], bullet: 300, aoe: 1.00, beam: 0.86, homing: 150, fan: 5, nova: 16, novaGap: 0.72, warn: 0.46, novaWarn: 0.60 },
+    extreme: { name: '极限', lives: 1, spawn: [0.48, 0.74], bullet: 365, aoe: 0.80, beam: 0.68, homing: 175, fan: 7, nova: 20, novaGap: 0.52, warn: 0.38, novaWarn: 0.50 }
   };
   var DIFF_ORDER = ['normal', 'hard', 'extreme'];
   var BEST_KEY = 'hok-dodge.best.';
@@ -631,30 +631,69 @@
     sfx.warn();
   }
 
+  function edgeOrigin() {
+    var o = edgePoint();
+    return {
+      x: clamp(o.x, A.x0 + 4, A.x1 - 4),
+      y: clamp(o.y, A.y0 + 4, A.y1 - 4)
+    };
+  }
+
+  function startWarning(kind, opts) {
+    state.attacks.push({
+      type: 'warn', kind: kind,
+      x: opts.o.x, y: opts.o.y,
+      aim: opts.aim || 0,
+      count: opts.count || 1,
+      spread: opts.spread || 0,
+      start: opts.start || 0,
+      gap: opts.gap || 0,
+      gapCenter: opts.gapCenter || 0,
+      color: opts.color || '#ff9a4d',
+      delay: opts.delay || DIFFS[state.diff].warn,
+      t: 0, fired: false, dieAt: 0
+    });
+    sfx.warn();
+  }
+
+  function fireWarning(a) {
+    var d = DIFFS[state.diff];
+    if (a.kind === 'nova') {
+      for (var i = 0; i < a.count; i++) {
+        var ang = a.start + i / a.count * TAU;
+        if (Math.abs(normAngle(ang - a.gapCenter)) < a.gap / 2) continue;
+        addBullet(a.x, a.y, ang, d.bullet * 0.62, 6.5, '#ff8a5c', 4.2);
+      }
+      addRing(a.x, a.y, 8, 92, 0.42, '#ff8a5c', 3);
+      burst(a.x, a.y, 6, '#ff8a5c', 120);
+      sfx.nova();
+    } else {
+      var n = a.count;
+      var spread = a.spread || 0;
+      var speed = d.bullet * (a.kind === 'fan' ? 0.92 : 1) * rand(0.95, 1.05);
+      var rr = a.kind === 'fan' ? 6.8 : 7.5;
+      for (var j = 0; j < n; j++) {
+        var off = n === 1 ? 0 : (j - (n - 1) / 2) * (spread / (n - 1));
+        addBullet(a.x, a.y, a.aim + off, speed, rr, a.color, 5);
+      }
+      sfx.shoot();
+    }
+  }
+
   function castBullet(count, spread) {
     var d = DIFFS[state.diff];
-    var o = edgePoint();
-    var base = Math.atan2(state.player.y - o.y, state.player.x - o.x);
+    var o = edgeOrigin();
     count = count || 1;
     spread = spread || 0;
-    for (var i = 0; i < count; i++) {
-      var off = count === 1 ? 0 : (i - (count - 1) / 2) * (spread / (count - 1));
-      addBullet(o.x, o.y, base + off, d.bullet * rand(0.94, 1.06), 7.5, '#ffb15c', 5);
-    }
-    sfx.shoot();
+    var aim = Math.atan2(state.player.y - o.y, state.player.x - o.x);
+    startWarning('bullet', { o: o, aim: aim, count: count, spread: spread, delay: d.warn, color: '#ffb15c' });
   }
 
   function castFan() {
     var d = DIFFS[state.diff];
-    var o = edgePoint();
-    var base = Math.atan2(state.player.y - o.y, state.player.x - o.x);
-    var n = d.fan;
-    var spread = 0.6;
-    for (var i = 0; i < n; i++) {
-      var off = n === 1 ? 0 : (i - (n - 1) / 2) * (spread / (n - 1));
-      addBullet(o.x, o.y, base + off, d.bullet * 0.92 * rand(0.95, 1.05), 6.8, '#ff9a4d', 5);
-    }
-    sfx.shoot();
+    var o = edgeOrigin();
+    var aim = Math.atan2(state.player.y - o.y, state.player.x - o.x);
+    startWarning('fan', { o: o, aim: aim, count: d.fan, spread: 0.6, delay: d.warn, color: '#ff9a4d' });
   }
 
   function castHoming(count) {
@@ -694,22 +733,19 @@
 
   function castNova() {
     var d = DIFFS[state.diff];
-    var n = d.nova;
     var ang0 = rand(0, TAU);
     var dd = rand(150, 250);
     var ox = clamp(state.player.x + Math.cos(ang0) * dd, A.x0 + 24, A.x1 - 24);
     var oy = clamp(state.player.y + Math.sin(ang0) * dd, A.y0 + 24, A.y1 - 24);
-    var start = rand(0, TAU);
-    var gapCenter = rand(0, TAU);
-    var gapHalf = d.novaGap / 2;
-    for (var i = 0; i < n; i++) {
-      var a = start + i / n * TAU;
-      if (Math.abs(normAngle(a - gapCenter)) < gapHalf) continue;
-      addBullet(ox, oy, a, d.bullet * 0.62, 6.5, '#ff8a5c', 4.2);
-    }
-    addRing(ox, oy, 8, 92, 0.42, '#ff8a5c', 3);
-    burst(ox, oy, 6, '#ff8a5c', 120);
-    sfx.nova();
+    startWarning('nova', {
+      o: { x: ox, y: oy },
+      start: rand(0, TAU),
+      gap: d.novaGap,
+      gapCenter: rand(0, TAU),
+      count: d.nova,
+      delay: d.novaWarn,
+      color: '#ff8a5c'
+    });
   }
 
   function castOne() {
@@ -761,7 +797,15 @@
       var a = state.attacks[i];
       var dead = false;
 
-      if (a.type === 'aoe') {
+      if (a.type === 'warn') {
+        a.t += dt;
+        if (!a.fired && a.t >= a.delay) {
+          a.fired = true;
+          a.dieAt = a.t + 0.12;
+          fireWarning(a);
+        }
+        if (a.fired && a.t >= a.dieAt) dead = true;
+      } else if (a.type === 'aoe') {
         a.t += dt;
         if (!a.exploded && a.t >= a.delay) {
           a.exploded = true;
@@ -1057,7 +1101,91 @@
   function drawAttacks(ts) {
     for (var i = 0; i < state.attacks.length; i++) {
       var a = state.attacks[i];
-      if (a.type === 'aoe') {
+      if (a.type === 'warn') {
+        var wp = clamp(a.t / a.delay, 0, 1);
+        var reach = Math.hypot(W, H);
+        if (a.kind === 'nova') {
+          ctx.strokeStyle = 'rgba(255,150,90,' + (0.35 + 0.4 * wp) + ')';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 24 + Math.sin(ts * 8) * 3, 0, TAU);
+          ctx.stroke();
+
+          var halfGap = a.gap / 2;
+
+          ctx.strokeStyle = 'rgba(255,150,90,.35)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 7]);
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 70, a.gapCenter + halfGap, a.gapCenter - halfGap + TAU);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = 'rgba(94,234,212,.14)';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.arc(a.x, a.y, 70, a.gapCenter - halfGap, a.gapCenter + halfGap);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(94,234,212,.95)';
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 70, a.gapCenter - halfGap, a.gapCenter + halfGap);
+          ctx.stroke();
+
+          ctx.strokeStyle = '#ffd0a0';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 18, -Math.PI / 2, -Math.PI / 2 + TAU * wp);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(255,140,90,' + (0.5 + 0.4 * wp) + ')';
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 5, 0, TAU);
+          ctx.fill();
+        } else {
+          var isCone = a.kind === 'fan' || a.spread > 0;
+          var half = (a.spread || 0) / 2;
+          ctx.save();
+          ctx.translate(a.x, a.y);
+          ctx.rotate(a.aim);
+          if (isCone) {
+            ctx.fillStyle = 'rgba(255,110,60,' + (0.03 + 0.07 * wp) + ')';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, reach, -half, half);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,160,100,' + (0.3 + 0.35 * wp) + ')';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(Math.cos(-half) * reach, Math.sin(-half) * reach);
+            ctx.moveTo(0, 0); ctx.lineTo(Math.cos(half) * reach, Math.sin(half) * reach);
+            ctx.stroke();
+          } else {
+            ctx.strokeStyle = 'rgba(255,160,100,' + (0.3 + 0.35 * wp) + ')';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([7, 9]);
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(reach, 0);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.restore();
+
+          ctx.strokeStyle = '#ffd0a0';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 18, -Math.PI / 2, -Math.PI / 2 + TAU * wp);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(255,140,90,' + (0.45 + 0.4 * wp) + ')';
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, 5 + 2 * Math.sin(ts * 10), 0, TAU);
+          ctx.fill();
+        }
+      } else if (a.type === 'aoe') {
         if (a.exploded) continue;
         var prog = clamp(a.t / a.delay, 0, 1);
         ctx.fillStyle = 'rgba(255,70,40,' + (0.10 + 0.22 * prog) + ')';
@@ -1532,6 +1660,11 @@
     damage: hitPlayer,
     clearInv: function () { state.player.inv = 0; },
     setPlayer: function (x, y) { state.player.x = x; state.player.y = y; },
+    warn: function (kind) {
+      if (kind === 'nova') castNova();
+      else if (kind === 'fan') castFan();
+      else castBullet(1);
+    },
     spawnAoeAt: function (x, y, r, delay) {
       state.attacks.push({ type: 'aoe', x: x, y: y, r: r || 60, delay: delay || 0.3, t: 0, color: '#ff6b3d', exploded: false, boom: 0 });
     },
