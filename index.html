@@ -132,6 +132,28 @@
   .over-time span{font-size:14px;color:var(--muted);margin-left:4px;font-weight:600}
   .over-sub{font-size:12px;color:var(--muted)}
   .over-best{font-size:12px;color:var(--gold2);margin-top:6px}
+  .result-panel{width:min(780px,95vw);text-align:left}
+  .result-grid{display:grid;grid-template-columns:1fr 1.08fr;gap:16px;align-items:center}
+  .result-left{text-align:center}
+  .result-right{border-left:1px solid rgba(240,198,116,.16);padding-left:16px;text-align:left}
+  .an-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:10px;letter-spacing:.14em;color:var(--muted)}
+  .an-head b{font-size:14px;letter-spacing:.02em;color:var(--gold2);white-space:nowrap}
+  .an-row{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:10px;color:var(--muted)}
+  .an-row>span{width:26px;flex:none}
+  .an-row>b{width:42px;text-align:right;color:#dfe8f5;font-variant-numeric:tabular-nums;font-size:10px;flex:none}
+  .an-bar{flex:1;height:5px;border-radius:99px;background:rgba(148,163,184,.15);overflow:hidden}
+  .an-bar i{display:block;height:100%;width:0;border-radius:99px}
+  #anMoveBar{background:linear-gradient(90deg,#59a7ff,#5eead4)}
+  #anEdgeBar{background:linear-gradient(90deg,#ffb15c,#ff6b3d)}
+  #anTurnBar{background:linear-gradient(90deg,#c08bff,#ff5d7a)}
+  .an-tips{list-style:none;margin:10px 0 0;padding:0}
+  .an-tips li{position:relative;padding-left:11px;margin-top:5px;font-size:10.5px;line-height:1.6;color:#c9d4e3}
+  .an-tips li::before{content:"";position:absolute;left:0;top:6px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+  .an-note{margin-top:8px;font-size:9px;color:#6f7f93}
+  @media (max-width:700px){
+    .result-grid{grid-template-columns:1fr}
+    .result-right{border-left:0;border-top:1px solid rgba(240,198,116,.16);padding-left:0;padding-top:10px}
+  }
   .pause-stats{font-size:13px;color:var(--muted);margin:10px 0 4px}
   .pause-stats b{color:var(--gold2)}
   .toast{
@@ -229,13 +251,25 @@
 </div>
 
 <div class="screen" id="over">
-  <div class="panel small-panel">
-    <div class="brand small">挑战结束</div>
-    <div class="over-time"><b id="overTime">0.0</b><span>秒</span></div>
-    <div class="over-sub">在 <b id="overDiff">普通</b> 难度被命中 <b id="overHits">0</b> 次</div>
-    <div class="over-best">本难度最佳：<b id="overBest">0.0s</b></div>
-    <button id="againBtn" class="primary" type="button">再来一局</button>
-    <button id="backBtn" class="ghost" type="button">换个难度</button>
+  <div class="panel result-panel">
+    <div class="result-grid">
+      <div class="result-left">
+        <div class="brand small">挑战结束</div>
+        <div class="over-time"><b id="overTime">0.0</b><span>秒</span></div>
+        <div class="over-sub">在 <b id="overDiff">普通</b> 难度被命中 <b id="overHits">0</b> 次</div>
+        <div class="over-best">本难度最佳：<b id="overBest">0.0s</b></div>
+        <button id="againBtn" class="primary" type="button">再来一局</button>
+        <button id="backBtn" class="ghost" type="button">换个难度</button>
+      </div>
+      <div class="result-right">
+        <div class="an-head"><span>走位分析</span><b id="anStyle">—</b></div>
+        <div class="an-row"><span>移动</span><div class="an-bar"><i id="anMoveBar"></i></div><b id="anMoveVal">0%</b></div>
+        <div class="an-row"><span>贴边</span><div class="an-bar"><i id="anEdgeBar"></i></div><b id="anEdgeVal">0%</b></div>
+        <div class="an-row"><span>急转</span><div class="an-bar"><i id="anTurnBar"></i></div><b id="anTurnVal">0.0/s</b></div>
+        <ul class="an-tips" id="anTips"></ul>
+        <div class="an-note" id="anNote"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -285,7 +319,12 @@
     texts: [],
     spawnTimer: 0,
     shake: 0,
-    flash: 0
+    flash: 0,
+    analysis: {
+      dist: 0, moving: 0, idle: 0, edge: 0, center: 0,
+      sharp: 0, sumAbs: 0, sumSigned: 0, lastAngle: null,
+      near: 0, edgeHits: 0
+    }
   };
 
   var input = { joy: { x: 0, y: 0, active: false, id: null }, keys: {} };
@@ -709,7 +748,9 @@
           burst(a.x, a.y, 16, '#ff7a3d', 240);
           state.booms.push({ x: a.x, y: a.y, r: a.r, life: 0.28, max: 0.28 });
           addRing(a.x, a.y, a.r * 0.4, a.r * 1.5, 0.45, '#ff7a3d', 5);
-          if (dist(p.x, p.y, a.x, a.y) <= a.r + p.r) hitPlayer();
+          var aoeD = dist(p.x, p.y, a.x, a.y);
+          if (aoeD <= a.r + p.r) hitPlayer();
+          else if (aoeD <= a.r + p.r + 26) state.analysis.near++;
         }
         if (a.exploded) {
           a.boom -= dt;
@@ -720,9 +761,15 @@
         a.x += a.vx * dt;
         a.y += a.vy * dt;
         if (a.t > a.life || a.x < A.x0 - 90 || a.x > A.x1 + 90 || a.y < A.y0 - 90 || a.y > A.y1 + 90) dead = true;
-        if (!dead && dist(p.x, p.y, a.x, a.y) < a.r + p.r) {
-          hitPlayer();
-          dead = true;
+        if (!dead) {
+          var bd = dist(p.x, p.y, a.x, a.y);
+          if (bd < a.r + p.r) {
+            hitPlayer();
+            dead = true;
+          } else if (bd < a.r + p.r + 20 && !a.near) {
+            a.near = true;
+            state.analysis.near++;
+          }
         }
       } else if (a.type === 'homing') {
         a.t += dt;
@@ -737,9 +784,15 @@
         a.trail.push({ x: a.x, y: a.y });
         if (a.trail.length > 10) a.trail.shift();
         if (a.t > a.life) dead = true;
-        if (!dead && dist(p.x, p.y, a.x, a.y) < a.r + p.r) {
-          hitPlayer();
-          dead = true;
+        if (!dead) {
+          var bd = dist(p.x, p.y, a.x, a.y);
+          if (bd < a.r + p.r) {
+            hitPlayer();
+            dead = true;
+          } else if (bd < a.r + p.r + 20 && !a.near) {
+            a.near = true;
+            state.analysis.near++;
+          }
         }
       } else if (a.type === 'beam') {
         a.t += dt;
@@ -751,9 +804,14 @@
         }
         if (a.fired) {
           a.active -= dt;
-          if (!a.hit && pointLineDist(p.x, p.y, a.x1, a.y1, a.x2, a.y2) < a.width * 0.5 + p.r) {
+          var lineD = pointLineDist(p.x, p.y, a.x1, a.y1, a.x2, a.y2);
+          var hitR = a.width * 0.5 + p.r;
+          if (!a.hit && lineD < hitR) {
             a.hit = true;
             hitPlayer();
+          } else if (!a.near && lineD < hitR + 24) {
+            a.near = true;
+            state.analysis.near++;
           }
           if (a.active <= -0.55) dead = true;
         }
@@ -797,6 +855,8 @@
     if (state.mode !== 'playing' || state.player.inv > 0) return false;
     state.lives--;
     state.hits++;
+    var hEdge = Math.min(state.player.x - A.x0, A.x1 - state.player.x, state.player.y - A.y0, A.y1 - state.player.y);
+    if (hEdge < 70) state.analysis.edgeHits++;
     state.player.inv = 1.25;
     state.shake = Math.max(state.shake, 15);
     state.flash = 0.7;
@@ -813,8 +873,30 @@
     var v = moveVec();
     var p = state.player;
     var speed = clamp(Math.min(W, H) * 0.95, 330, 520);
+    var ox = p.x, oy = p.y;
     p.x = clamp(p.x + v.x * speed * dt, A.x0, A.x1);
     p.y = clamp(p.y + v.y * speed * dt, A.y0, A.y1);
+
+    var an = state.analysis;
+    var mdx = p.x - ox, mdy = p.y - oy;
+    var moved = Math.hypot(mdx, mdy);
+    an.dist += moved;
+    if (moved > 0.25) an.moving += dt; else an.idle += dt;
+    var edgeDist = Math.min(p.x - A.x0, A.x1 - p.x, p.y - A.y0, A.y1 - p.y);
+    if (edgeDist < 64) an.edge += dt; else an.center += dt;
+    if (moved > 0.8) {
+      var mAng = Math.atan2(mdy, mdx);
+      if (an.lastAngle !== null) {
+        var dAng = normAngle(mAng - an.lastAngle);
+        an.sumAbs += Math.abs(dAng);
+        an.sumSigned += dAng;
+        if (Math.abs(dAng) > 0.85) an.sharp++;
+      }
+      an.lastAngle = mAng;
+    } else {
+      an.lastAngle = null;
+    }
+
     if (p.inv > 0) p.inv = Math.max(0, p.inv - dt);
 
     if (v.mag > 0.04) {
@@ -1228,6 +1310,11 @@
     state.spawnTimer = 1.5;
     state.shake = 0;
     state.flash = 0;
+    state.analysis = {
+      dist: 0, moving: 0, idle: 0, edge: 0, center: 0,
+      sharp: 0, sumAbs: 0, sumSigned: 0, lastAngle: null,
+      near: 0, edgeHits: 0
+    };
     state.player.x = (A.x0 + A.x1) / 2;
     state.player.y = (A.y0 + A.y1) / 2;
     state.player.inv = 1.6;
@@ -1278,6 +1365,53 @@
     sfx.click();
   }
 
+  function buildAnalysis() {
+    var an = state.analysis;
+    var t = Math.max(0.1, state.time);
+    var movePct = clamp(an.moving / t * 100, 0, 100);
+    var edgePct = clamp(an.edge / t * 100, 0, 100);
+    var sharpRate = an.sharp / Math.max(0.5, an.moving);
+    var maxSpeed = clamp(Math.min(W, H) * 0.95, 330, 520);
+    var speedRatio = (an.dist / t) / maxSpeed;
+    var consistency = an.sumAbs > 0.1 ? Math.abs(an.sumSigned) / an.sumAbs : 0;
+    var style = '均衡游走型';
+    if (movePct < 35) style = '站桩防守型';
+    else if (edgePct > 35) style = '贴边游走型';
+    else if (sharpRate > 2.2) style = '高频抖动型';
+    else if (consistency > 0.65 && an.sumAbs > 8) style = '绕圈拉扯型';
+    else if (speedRatio > 0.7 && sharpRate < 1.2) style = '直线拉扯型';
+
+    var tips = [];
+    if (movePct < 45) tips.push('保持移动：站着不动最容易被延迟圈锁定，轮盘尽量保持 60% 以上时间有输入。');
+    if (edgePct > 30) tips.push('少贴边：边缘会限制左右闪避空间，预判弹道更容易命中；被逼到边缘时向中场斜切。');
+    if (sharpRate > 1.8) tips.push('减少左右急抖：频繁反向会损失速度，先判断安全落点，再一次性走到位。');
+    if (style === '直线拉扯型' || (speedRatio > 0.65 && sharpRate < 1.0)) tips.push('直线走位容易被瞄准弹道抓到；弹道出手后做一个垂直变向。');
+    if (style === '绕圈拉扯型') tips.push('绕圈时偶尔反向或急停，可以让预判弹道打空。');
+    if (an.edgeHits >= 2 && an.edgeHits >= Math.max(2, state.hits * 0.5)) tips.push('你在贴边时被命中较多：宁可少一点场地空间，也要留在中场。');
+    if (state.hits >= 3 && t > 8) tips.push('被命中后的 1 秒无敌可以穿过弹幕换位，不要停在原地等无敌结束。');
+    if (an.near >= 4 && state.hits <= 2) tips.push('擦弹很惊险但容错低，把安全边距留大一点会更稳。');
+    if (!tips.length) tips.push('走位很稳；继续保持移动，并尝试提前 0.5 秒预判技能落点。');
+    if (tips.length < 2) tips.push('小技巧：被瞄准时不要直线后撤，侧向一步往往就能躲开弹道。');
+    tips = tips.slice(0, 3);
+
+    $('anStyle').textContent = style;
+    $('anMoveVal').textContent = Math.round(movePct) + '%';
+    $('anMoveBar').style.width = movePct.toFixed(0) + '%';
+    $('anEdgeVal').textContent = Math.round(edgePct) + '%';
+    $('anEdgeBar').style.width = edgePct.toFixed(0) + '%';
+    $('anTurnVal').textContent = sharpRate.toFixed(1) + '/s';
+    $('anTurnBar').style.width = clamp(sharpRate / 3 * 100, 0, 100).toFixed(0) + '%';
+    $('anNote').textContent = '本局移动 ' + Math.round(an.dist) + 'px · 擦弹 ' + an.near + ' 次';
+
+    var ul = $('anTips');
+    ul.innerHTML = '';
+    for (var i = 0; i < tips.length; i++) {
+      var li = document.createElement('li');
+      li.textContent = tips[i];
+      ul.appendChild(li);
+    }
+  }
+
   function endGame() {
     if (state.mode !== 'playing') return;
     state.mode = 'over';
@@ -1293,6 +1427,7 @@
     $('overDiff').textContent = DIFFS[state.diff].name;
     $('overHits').textContent = String(state.hits);
     $('overBest').textContent = best.toFixed(1) + 's';
+    buildAnalysis();
     showScreen('over');
     sfx.over();
     if (state.time > prev) showToast(prev > 0 ? '新纪录！' : '完成挑战');
