@@ -59,17 +59,18 @@
   body.playing .joy-zone{opacity:1;pointer-events:auto}
   .joy-base{
     position:absolute;left:50%;top:50%;width:132px;height:132px;margin:-66px 0 0 -66px;border-radius:50%;
-    border:2px solid rgba(240,198,116,.42);
-    background:radial-gradient(circle at 50% 50%,rgba(20,32,54,.62),rgba(7,11,20,.38));
-    box-shadow:0 0 26px rgba(240,198,116,.14),inset 0 0 22px rgba(89,167,255,.08);
-    backdrop-filter:blur(2px);
+    border:2px solid rgba(240,198,116,.30);
+    background:radial-gradient(circle at 50% 50%,rgba(20,32,54,.24),rgba(7,11,20,.10));
+    box-shadow:0 0 20px rgba(240,198,116,.08),inset 0 0 16px rgba(89,167,255,.05);
+    backdrop-filter:blur(1px);
   }
-  .joy-base::after{content:"";position:absolute;inset:15px;border-radius:50%;border:1px dashed rgba(148,163,184,.18)}
-  .joy-zone.active .joy-base{border-color:rgba(240,198,116,.8);box-shadow:0 0 34px rgba(240,198,116,.28),inset 0 0 22px rgba(89,167,255,.12)}
+  .joy-base::after{content:"";position:absolute;inset:15px;border-radius:50%;border:1px dashed rgba(148,163,184,.12)}
+  .joy-zone.active .joy-base{border-color:rgba(240,198,116,.62);box-shadow:0 0 26px rgba(240,198,116,.16),inset 0 0 16px rgba(89,167,255,.07)}
   .joy-knob{
     position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;
-    background:radial-gradient(circle at 35% 30%,#d6fbff,#53c7ff 45%,#2a6dff 100%);
-    box-shadow:0 0 18px rgba(83,199,255,.6),0 4px 12px rgba(0,0,0,.5);
+    background:radial-gradient(circle at 35% 30%,rgba(214,251,255,.92),rgba(83,199,255,.88) 45%,rgba(42,109,255,.85) 100%);
+    box-shadow:0 0 14px rgba(83,199,255,.42),0 4px 12px rgba(0,0,0,.42);
+    opacity:.9;
     will-change:transform;
   }
 
@@ -293,7 +294,8 @@
     zone: $('joyZone'),
     base: $('joyBase'),
     knob: $('joyKnob'),
-    max: 52,
+    full: 38,
+    travel: 52,
     center: { x: 0, y: 0 }
   };
 
@@ -426,14 +428,13 @@
     var dx = e.clientX - joy.center.x;
     var dy = e.clientY - joy.center.y;
     var len = Math.hypot(dx, dy);
-    if (len > joy.max) {
-      dx = dx / len * joy.max;
-      dy = dy / len * joy.max;
-      len = joy.max;
-    }
-    input.joy.x = len > 0 ? dx / joy.max : 0;
-    input.joy.y = len > 0 ? dy / joy.max : 0;
-    joy.knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+    var dirX = len > 0 ? dx / len : 0;
+    var dirY = len > 0 ? dy / len : 0;
+    var mag = clamp(len / joy.full, 0, 1);
+    input.joy.x = dirX * mag;
+    input.joy.y = dirY * mag;
+    var visual = Math.min(len, joy.travel);
+    joy.knob.style.transform = 'translate(' + (dirX * visual).toFixed(1) + 'px,' + (dirY * visual).toFixed(1) + 'px)';
     joy.zone.classList.add('active');
   }
   function joyUp(e) {
@@ -815,7 +816,7 @@
     state.time += dt;
     var v = moveVec();
     var p = state.player;
-    var speed = clamp(Math.min(W, H) * 0.62, 235, 340);
+    var speed = clamp(Math.min(W, H) * 0.95, 330, 520);
     p.x = clamp(p.x + v.x * speed * dt, A.x0, A.x1);
     p.y = clamp(p.y + v.y * speed * dt, A.y0, A.y1);
     if (p.inv > 0) p.inv = Math.max(0, p.inv - dt);
